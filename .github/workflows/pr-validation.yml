@@ -7,7 +7,8 @@ on:
 
 env:
   DOTNET_VERSION: '9.0.x'
-  SOLUTION_PATH: './DevSecOpsDemo.sln'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
   pr-validation:
@@ -27,20 +28,18 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
     - name: 📦 Restore Dependencies
-      run: dotnet restore ${{ env.SOLUTION_PATH }}
+      run: dotnet restore
     
     - name: 🏗️ Build Solution (No Warnings)
-      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration Release --no-restore --warnaserror
+      run: dotnet build --configuration Release --no-restore --warnaserror
     
     - name: 🧪 Run All Tests with Coverage
       run: |
-        dotnet test ${{ env.SOLUTION_PATH }} \
+        dotnet test \
           --configuration Release \
           --no-build \
           --logger "trx;LogFileName=pr-test-results.trx" \
-          --logger "console;verbosity=detailed" \
-          --collect:"XPlat Code Coverage" \
-          --results-directory ./TestResults
+          --logger "console;verbosity=detailed"
     
     - name: 📦 Generate PR Build Artifact
       if: success()
@@ -65,14 +64,13 @@ jobs:
         path: ./pr-build/
         retention-days: 14
     
-    - name: 📊 Generate Test Report
-      uses: dorny/test-reporter@v1
+    - name: 📊 Upload Test Results
+      uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: 🧪 PR Test Results
+        name: pr-test-results-${{ github.event.pull_request.number }}
         path: '**/pr-test-results.trx'
-        reporter: dotnet-trx
-        fail-on-error: true
+        retention-days: 14
     
     - name: ✅ PR Quality Summary
       if: always()

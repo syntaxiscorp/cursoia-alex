@@ -1,0 +1,59 @@
+name: CI - Build and Test
+
+# Disparadores: se ejecuta en push y pull request hacia main/master
+on:
+  push:
+    branches: 
+      - main
+      - master
+  pull_request:
+    branches: 
+      - main
+      - master
+
+# Variables de entorno globales
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Paso 1: Checkout del código
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # Paso 2: Instalar la versión de .NET adecuada
+      - name: Configurar .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Paso 3: Mostrar información del entorno
+      - name: Mostrar versión de .NET
+        run: dotnet --info
+
+      # Paso 4: Restaurar dependencias
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      # Paso 5: Compilar el proyecto en modo Release
+      - name: Compilar proyecto (Release)
+        run: dotnet build --configuration Release --no-restore
+
+      # Paso 6: Ejecutar las pruebas
+      - name: Ejecutar pruebas
+        run: dotnet test --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      # Paso 7: Publicar resultados de pruebas (opcional pero útil)
+      - name: Publicar resultados de pruebas
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: '**/test-results.trx'
+          retention-days: 30

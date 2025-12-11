@@ -1,0 +1,122 @@
+name: CI - Build and Test (Simplified)
+
+# Disparadores: se ejecuta en push y pull request hacia main/develop
+on:
+  push:
+    branches: 
+      - main
+      - develop
+  pull_request:
+    branches: 
+      - main
+      - develop
+
+# Variables de entorno globales
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: 🏗️ Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Paso 1: Checkout del código
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      # Paso 2: Instalar la versión de .NET adecuada
+      - name: ⚙️ Configurar .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Paso 3: Mostrar información del entorno
+      - name: 📋 Mostrar versión de .NET
+        run: dotnet --info
+
+      # Paso 4: Restaurar dependencias
+      - name: 📦 Restaurar dependencias
+        run: dotnet restore
+
+      # Paso 5: Compilar el proyecto en modo Release
+      - name: 🏗️ Compilar proyecto (Release)
+        run: dotnet build --configuration Release --no-restore --warnaserror
+
+      # Paso 6: Ejecutar las pruebas
+      - name: 🧪 Ejecutar pruebas
+        run: dotnet test --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      # Paso 7: Crear build para distribución
+      - name: 📦 Crear build de distribución
+        run: dotnet publish src/DevSecOpsDemo.Api/DevSecOpsDemo.Api.csproj --configuration Release --no-build --output ./dist --self-contained false
+
+      # Paso 8: Generar información del build
+      - name: 📄 Generar información del build
+        run: |
+          echo "# DevSecOpsDemo Build" > ./dist/BUILD_INFO.md
+          echo "" >> ./dist/BUILD_INFO.md
+          echo "**Build Date:** $(date -u)" >> ./dist/BUILD_INFO.md
+          echo "**Commit SHA:** ${{ github.sha }}" >> ./dist/BUILD_INFO.md
+          echo "**Branch:** ${{ github.ref_name }}" >> ./dist/BUILD_INFO.md
+          echo "**Configuration:** Release" >> ./dist/BUILD_INFO.md
+          echo "" >> ./dist/BUILD_INFO.md
+          echo "## Ejecución:" >> ./dist/BUILD_INFO.md
+          echo "\`\`\`bash" >> ./dist/BUILD_INFO.md
+          echo "dotnet DevSecOpsDemo.Api.dll" >> ./dist/BUILD_INFO.md
+          echo "\`\`\`" >> ./dist/BUILD_INFO.md
+
+      # Paso 9: Subir resultados de pruebas
+      - name: 📊 Subir resultados de pruebas
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.sha }}
+          path: '**/test-results.trx'
+          retention-days: 30
+
+      # Paso 10: Subir build compilado
+      - name: ⬆️ Subir build compilado
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: devsecopsdemo-build-${{ github.sha }}
+          path: ./dist/
+          retention-days: 30
+
+  security-scan:
+    name: 🔒 Análisis de Seguridad
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: ⚙️ Setup .NET ${{ env.DOTNET_VERSION }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: 📦 Restore Dependencies
+      run: dotnet restore
+    
+    - name: 🛡️ Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+    
+    - name: 🏗️ Build for Analysis
+      run: dotnet build --configuration Release --no-restore
+    
+    - name: 🛡️ Perform CodeQL Analysis  
+      uses: github/codeql-action/analyze@v3
+    
+    - name: 🔒 Security Vulnerability Scan
+      run: |
+        echo "🔒 Ejecutando análisis de vulnerabilidades..."
+        dotnet list package --vulnerable --include-transitive || true
+        echo "✅ Análisis de seguridad completado"
