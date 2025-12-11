@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage" uri="datacollector://Microsoft/CodeCoverage/2.0" assemblyQualifiedName="Microsoft.VisualStudio.CodeCoverage.MSBuild.DataCollector, Microsoft.VisualStudio.CodeCoverage.MSBuild, Version=17.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>
+            <!-- Excluir archivos de pruebas -->
+            [*.Tests]*
+            [*Test*]*
+            
+            <!-- Excluir archivos generados -->
+            [*]*.Designer.*
+            [*]*AssemblyInfo.*
+            [*]*.GlobalUsings.*
+            
+            <!-- Excluir Program.cs (entry point) -->
+            [*]Program
+            
+            <!-- Excluir modelos simples (POCOs) -->
+            [DevSecOpsDemo.Domain.Models]*
+          </Exclude>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+  <RunConfiguration>
+    <MaxCpuCount>0</MaxCpuCount>
+    <ResultsDirectory>./TestResults</ResultsDirectory>
+  </RunConfiguration>
+</RunSettings>

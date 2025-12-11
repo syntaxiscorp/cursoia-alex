@@ -1,0 +1,148 @@
+name: CI Pipeline - DevSecOpsDemo
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  SOLUTION_PATH: './DevSecOpsDemo.sln'
+  BUILD_CONFIGURATION: 'Release'
+
+jobs:
+  # Job 1: Build and Test
+  build-and-test:
+    name: 🏗️ Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: ⚙️ Setup .NET ${{ env.DOTNET_VERSION }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: 📋 Display .NET Info
+      run: dotnet --info
+    
+    - name: 🔧 Cache NuGet packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: 📦 Restore Dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+    
+    - name: 🏗️ Build Solution (Release)
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
+    
+    - name: 🧪 Run Unit Tests
+      run: dotnet test ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+    
+    - name: 📊 Publish Test Results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: 🧪 Test Results
+        path: '**/test-results.trx'
+        reporter: dotnet-trx
+    
+    - name: 📦 Create Release Build
+      run: dotnet publish src/DevSecOpsDemo.Api/DevSecOpsDemo.Api.csproj --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output ./build/api --self-contained false
+    
+    - name: 📄 Generate Build Info
+      run: |
+        echo "# DevSecOpsDemo Build Information" > ./build/BUILD_INFO.md
+        echo "" >> ./build/BUILD_INFO.md
+        echo "**Build Date:** $(date -u)" >> ./build/BUILD_INFO.md
+        echo "**Commit SHA:** ${{ github.sha }}" >> ./build/BUILD_INFO.md
+        echo "**Branch:** ${{ github.ref_name }}" >> ./build/BUILD_INFO.md
+        echo "**Configuration:** ${{ env.BUILD_CONFIGURATION }}" >> ./build/BUILD_INFO.md
+        echo "**Triggered by:** ${{ github.event_name }}" >> ./build/BUILD_INFO.md
+        echo "" >> ./build/BUILD_INFO.md
+        echo "## How to run:" >> ./build/BUILD_INFO.md
+        echo "\`\`\`bash" >> ./build/BUILD_INFO.md
+        echo "dotnet DevSecOpsDemo.Api.dll" >> ./build/BUILD_INFO.md
+        echo "\`\`\`" >> ./build/BUILD_INFO.md
+    
+    - name: ⬆️ Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: devsecopsdemo-build-${{ github.sha }}
+        path: ./build/
+        retention-days: 30
+        if-no-files-found: error
+
+  # Job 2: Code Quality Analysis  
+  code-quality:
+    name: 🔍 Code Quality
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: ⚙️ Setup .NET ${{ env.DOTNET_VERSION }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: 📦 Restore Dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+    
+    - name: 🔍 Run Code Analysis
+      run: |
+        echo "🔍 Running static code analysis..."
+        dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --verbosity normal
+    
+    - name: 🛡️ Initialize CodeQL
+      if: github.event_name == 'push' || github.event_name == 'pull_request'
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+    
+    - name: 🛡️ Perform CodeQL Analysis  
+      if: github.event_name == 'push' || github.event_name == 'pull_request'
+      uses: github/codeql-action/analyze@v3
+
+  # Job 3: Security Scan
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: ⚙️ Setup .NET ${{ env.DOTNET_VERSION }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: 📦 Restore Dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+    
+    - name: 🔒 Security Vulnerability Scan
+      run: |
+        echo "🔒 Running security vulnerability scan..."
+        dotnet list package --vulnerable --include-transitive || true
+        echo "✅ Security scan completed"
+    
+    - name: 🔍 Dependency Check
+      run: |
+        echo "🔍 Checking for outdated packages..."
+        dotnet list package --outdated || true
